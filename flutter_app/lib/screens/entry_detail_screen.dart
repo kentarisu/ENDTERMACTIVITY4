@@ -18,6 +18,7 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
   Entry? _entry;
   bool _isLoading = true;
   String? _error;
+  bool _isLiking = false;
 
   @override
   void initState() {
@@ -38,6 +39,66 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _toggleLike() async {
+    if (_entry == null || _isLiking) return;
+
+    setState(() {
+      _isLiking = true;
+    });
+
+    try {
+      final entryProvider = Provider.of<EntryProvider>(context, listen: false);
+      
+      // Try to like the entry
+      final success = await entryProvider.likeEntry(widget.entryId);
+      
+      if (success) {
+        // Reload entry to get updated like count
+        await _loadEntry();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Entry liked!')),
+          );
+        }
+      } else {
+        // If like fails (maybe already liked), try to unlike
+        final unlikeSuccess = await entryProvider.unlikeEntry(widget.entryId);
+        if (unlikeSuccess) {
+          await _loadEntry();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Entry unliked')),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(entryProvider.error ?? 'Error toggling like'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLiking = false;
+        });
+      }
     }
   }
 
@@ -65,9 +126,18 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
       final entryProvider = Provider.of<EntryProvider>(context, listen: false);
       final success = await entryProvider.deleteEntry(widget.entryId);
       if (success && mounted) {
+        // Refresh the entries list
+        await entryProvider.loadEntries();
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Entry deleted')),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(entryProvider.error ?? 'Failed to delete entry'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -87,12 +157,16 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
           if (isOwner)
             IconButton(
               icon: const Icon(Icons.edit),
-              onPressed: () {
-                Navigator.of(context).push(
+              onPressed: () async {
+                final entryProvider = Provider.of<EntryProvider>(context, listen: false);
+                await Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => EntryFormScreen(entry: _entry),
                   ),
-                ).then((_) => _loadEntry());
+                );
+                // Refresh both the detail and the list
+                _loadEntry();
+                entryProvider.loadEntries();
               },
             ),
           if (isOwner)
@@ -181,16 +255,24 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
                                   ),
                             ),
                           ],
-                          if (_entry!.likeCount != null && _entry!.likeCount! > 0) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(Icons.favorite, color: Colors.red, size: 16),
-                                const SizedBox(width: 4),
-                                Text('${_entry!.likeCount} likes'),
-                              ],
-                            ),
-                          ],
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  Icons.favorite,
+                                  color: _isLiking ? Colors.grey : Colors.red,
+                                ),
+                                onPressed: _isLiking ? null : _toggleLike,
+                                tooltip: 'Like this entry',
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${_entry!.likeCount ?? 0} ${(_entry!.likeCount ?? 0) == 1 ? 'like' : 'likes'}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ],
+                          ),
                           const Divider(height: 32),
                           if (_entry!.review != null && _entry!.review!.isNotEmpty) ...[
                             Text(

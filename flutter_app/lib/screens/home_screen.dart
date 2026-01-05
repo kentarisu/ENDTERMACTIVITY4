@@ -80,6 +80,39 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: () => entryProvider.loadEntries(status: _selectedStatus),
         child: entryProvider.isLoading && entryProvider.entries.isEmpty
             ? const Center(child: CircularProgressIndicator())
+            : entryProvider.error != null && entryProvider.entries.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading entries',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            entryProvider.error!,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            entryProvider.clearError();
+                            entryProvider.loadEntries(status: _selectedStatus);
+                          },
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
             : entryProvider.entries.isEmpty
                 ? Center(
                     child: Column(
@@ -161,12 +194,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
+        onPressed: () async {
+          await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => const EntryFormScreen(),
             ),
           );
+          // Refresh list after returning from form
+          entryProvider.loadEntries(status: _selectedStatus);
         },
         child: const Icon(Icons.add),
       ),

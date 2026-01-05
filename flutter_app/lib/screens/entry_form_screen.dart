@@ -82,6 +82,8 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     }
 
     if (success && mounted) {
+      // Refresh the entries list
+      await entryProvider.loadEntries();
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

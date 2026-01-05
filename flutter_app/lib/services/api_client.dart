@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user.dart';
@@ -6,21 +7,40 @@ import '../models/entry.dart';
 class ApiClient {
   final Dio _dio;
   final FlutterSecureStorage _storage;
-  static const String _baseUrl = 'http://localhost/ENDTERMACTIVITY4/backend/public';
-  // For Android emulator, use: 'http://10.0.2.2/ENDTERMACTIVITY4/backend/public'
-  // For iOS simulator, use: 'http://localhost/ENDTERMACTIVITY4/backend/public'
-  // For physical device, use your computer's IP: 'http://192.168.x.x/ENDTERMACTIVITY4/backend/public'
+  static const String _baseUrl = 'https://d1b0ade205c4.ngrok-free.app';
+  // For FlutLab Web Preview: Use your computer's IP address instead of localhost
+  // Find your IP: Open Command Prompt, type 'ipconfig', look for IPv4 Address
+  // Example: 'http://192.168.1.100:8000'
+  // For Android emulator: 'http://10.0.2.2:8000'
+  // For iOS simulator: 'http://localhost:8000'
+  // For physical device: 'http://YOUR_COMPUTER_IP:8000'
 
   ApiClient(this._dio, this._storage) {
     _dio.options.baseUrl = _baseUrl;
     _dio.options.headers['Content-Type'] = 'application/json';
+    _dio.options.headers['ngrok-skip-browser-warning'] = 'true';
+    _dio.options.connectTimeout = const Duration(seconds: 10);
+    _dio.options.receiveTimeout = const Duration(seconds: 10);
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final token = await _storage.read(key: 'auth_token');
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
+        // Always add ngrok skip warning header
+        options.headers['ngrok-skip-browser-warning'] = 'true';
         handler.next(options);
+      },
+      onResponse: (response, handler) {
+        // If response.data is a string, try to parse it as JSON
+        if (response.data is String) {
+          try {
+            response.data = jsonDecode(response.data as String);
+          } catch (e) {
+            // If parsing fails, it's not JSON - pass through the error
+          }
+        }
+        handler.next(response);
       },
       onError: (error, handler) {
         handler.next(error);
@@ -91,19 +111,57 @@ class ApiClient {
       if (userId != null) queryParams['user_id'] = userId;
 
       final response = await _dio.get('/api/entries', queryParameters: queryParams);
-      final entries = (response.data['entries'] as List)
-          .map((json) => Entry.fromJson(json))
+      final data = response.data;
+      
+      // Validate response structure
+      if (data is! Map<String, dynamic>) {
+        throw 'Invalid response format: expected Map, got ${data.runtimeType}';
+      }
+      
+      if (data['entries'] == null) {
+        throw 'Entries not found in response. Response keys: ${data.keys.toList()}';
+      }
+      
+      if (data['entries'] is! List) {
+        throw 'Invalid entries format: expected List, got ${data['entries'].runtimeType}. Value: ${data['entries']}';
+      }
+      
+      final entriesList = data['entries'] as List;
+      final entries = entriesList
+          .map((json) {
+            try {
+              if (json is! Map<String, dynamic>) {
+                throw 'Invalid entry format: expected Map, got ${json.runtimeType}. Value: $json';
+              }
+              // After the check above, json is guaranteed to be Map<String, dynamic>
+              return Entry.fromJson(json);
+            } catch (e) {
+              throw 'Error parsing entry: $e. Entry data: $json';
+            }
+          })
           .toList();
       return entries;
     } on DioException catch (e) {
       throw _handleError(e);
+    } catch (e) {
+      throw 'Error loading entries: $e';
     }
   }
 
   Future<Entry> getEntry(int id) async {
     try {
       final response = await _dio.get('/api/entries/$id');
-      return Entry.fromJson(response.data['entry']);
+      final data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw 'Invalid response format: expected Map, got ${data.runtimeType}';
+      }
+      if (data['entry'] == null) {
+        throw 'Entry not found in response';
+      }
+      if (data['entry'] is! Map<String, dynamic>) {
+        throw 'Invalid entry format: expected Map, got ${data['entry'].runtimeType}. Value: ${data['entry']}';
+      }
+      return Entry.fromJson(data['entry'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -186,13 +244,24 @@ class ApiClient {
 
   String _handleError(DioException error) {
     if (error.response != null) {
-      final message = error.response?.data['message'] ?? 'An error occurred';
-      return message;
+      final data = error.response?.data;
+      if (data is Map<String, dynamic>) {
+        final message = data['message'] ?? 'An error occurred';
+        final details = data['details'];
+        if (details != null) {
+          return '$message: $details';
+        }
+        return message.toString();
+      }
+      return 'An error occurred';
     } else if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout) {
       return 'Connection timeout. Please check your internet connection.';
     } else if (error.type == DioExceptionType.connectionError) {
-      return 'Could not connect to server. Please check if the backend is running.';
+      // Provide more detailed error information
+      final errorMsg = error.message ?? 'Unknown connection error';
+      final baseUrl = _baseUrl;
+      return 'Could not connect to server at $baseUrl. Error: $errorMsg. Please check if the backend is running and accessible.';
     } else {
       return error.message ?? 'An unknown error occurred';
     }

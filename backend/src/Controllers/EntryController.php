@@ -2,6 +2,7 @@
 
 namespace Controllers;
 
+use Exception;
 use PDO;
 
 class EntryController
@@ -13,56 +14,104 @@ class EntryController
 
     public function list(): void
     {
-        $status = $_GET['status'] ?? null;
-        $userId = isset($_GET['user_id']) ? (int) $_GET['user_id'] : null;
+        try {
+            $status = $_GET['status'] ?? null;
+            $userId = isset($_GET['user_id']) ? (int) $_GET['user_id'] : null;
 
-        $query = 'SELECT 
-            e.id, e.user_id, e.title, e.release_year, e.review, e.rating, e.status, e.poster_url, e.created_at, e.updated_at,
-            u.display_name as user_name,
-            (SELECT COUNT(*) FROM likes WHERE entry_id = e.id) as like_count
-            FROM entries e
-            JOIN users u ON e.user_id = u.id
-            WHERE 1=1';
+            $query = 'SELECT 
+                e.id, e.user_id, e.title, e.release_year, e.review, e.rating, e.status, e.poster_url, e.created_at, e.updated_at,
+                u.display_name as user_name,
+                (SELECT COUNT(*) FROM likes WHERE entry_id = e.id) as like_count
+                FROM entries e
+                JOIN users u ON e.user_id = u.id
+                WHERE 1=1';
 
-        $params = [];
+            $params = [];
 
-        if ($status) {
-            $query .= ' AND e.status = :status';
-            $params[':status'] = $status;
+            if ($status) {
+                $query .= ' AND e.status = :status';
+                $params[':status'] = $status;
+            }
+
+            if ($userId) {
+                $query .= ' AND e.user_id = :user_id';
+                $params[':user_id'] = $userId;
+            }
+
+            $query .= ' ORDER BY e.created_at DESC';
+
+            $stmt = $this->db->prepare($query);
+            if (!$stmt) {
+                json_response(['message' => 'Database error', 'error' => 'Failed to prepare query'], 500);
+                return;
+            }
+
+            $stmt->execute($params);
+            $entries = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Ensure numeric fields are properly typed
+            foreach ($entries as &$entry) {
+                $entry['id'] = (int) $entry['id'];
+                $entry['user_id'] = (int) $entry['user_id'];
+                if ($entry['release_year'] !== null) {
+                    $entry['release_year'] = (int) $entry['release_year'];
+                }
+                if ($entry['rating'] !== null) {
+                    $entry['rating'] = (int) $entry['rating'];
+                }
+                if ($entry['like_count'] !== null) {
+                    $entry['like_count'] = (int) $entry['like_count'];
+                }
+            }
+            unset($entry); // Break reference
+
+            json_response(['entries' => $entries]);
+        } catch (Exception $e) {
+            json_response(['message' => 'Error loading entries', 'error' => $e->getMessage()], 500);
         }
-
-        if ($userId) {
-            $query .= ' AND e.user_id = :user_id';
-            $params[':user_id'] = $userId;
-        }
-
-        $query .= ' ORDER BY e.created_at DESC';
-
-        $stmt = $this->db->prepare($query);
-        $stmt->execute($params);
-        $entries = $stmt->fetchAll();
-
-        json_response(['entries' => $entries]);
     }
 
     public function show(int $id): void
     {
-        $stmt = $this->db->prepare('SELECT 
-            e.id, e.user_id, e.title, e.release_year, e.review, e.rating, e.status, e.poster_url, e.created_at, e.updated_at,
-            u.display_name as user_name,
-            (SELECT COUNT(*) FROM likes WHERE entry_id = e.id) as like_count
-            FROM entries e
-            JOIN users u ON e.user_id = u.id
-            WHERE e.id = :id');
-        $stmt->execute([':id' => $id]);
-        $entry = $stmt->fetch();
+        try {
+            $stmt = $this->db->prepare('SELECT 
+                e.id, e.user_id, e.title, e.release_year, e.review, e.rating, e.status, e.poster_url, e.created_at, e.updated_at,
+                u.display_name as user_name,
+                (SELECT COUNT(*) FROM likes WHERE entry_id = e.id) as like_count
+                FROM entries e
+                JOIN users u ON e.user_id = u.id
+                WHERE e.id = :id');
+            
+            if (!$stmt) {
+                json_response(['message' => 'Database error', 'error' => 'Failed to prepare query'], 500);
+                return;
+            }
+            
+            $stmt->execute([':id' => $id]);
+            $entry = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$entry) {
-            json_response(['message' => 'Entry not found'], 404);
-            return;
+            if (!$entry) {
+                json_response(['message' => 'Entry not found'], 404);
+                return;
+            }
+
+            // Ensure numeric fields are properly typed
+            $entry['id'] = (int) $entry['id'];
+            $entry['user_id'] = (int) $entry['user_id'];
+            if ($entry['release_year'] !== null) {
+                $entry['release_year'] = (int) $entry['release_year'];
+            }
+            if ($entry['rating'] !== null) {
+                $entry['rating'] = (int) $entry['rating'];
+            }
+            if ($entry['like_count'] !== null) {
+                $entry['like_count'] = (int) $entry['like_count'];
+            }
+
+            json_response(['entry' => $entry]);
+        } catch (Exception $e) {
+            json_response(['message' => 'Error loading entry', 'error' => $e->getMessage()], 500);
         }
-
-        json_response(['entry' => $entry]);
     }
 
     public function create(int $userId): void

@@ -20,8 +20,20 @@ class AuthController
         $password = $data['password'] ?? '';
         $displayName = trim($data['displayName'] ?? '');
 
-        if (!$email || strlen($password) < 8 || $displayName === '') {
-            json_response(['message' => 'Invalid payload'], 422);
+        // Better error messages
+        $errors = [];
+        if (!$email) {
+            $errors[] = 'Valid email is required';
+        }
+        if (strlen($password) < 8) {
+            $errors[] = 'Password must be at least 8 characters';
+        }
+        if ($displayName === '') {
+            $errors[] = 'Display name is required';
+        }
+
+        if (!empty($errors)) {
+            json_response(['message' => 'Invalid payload', 'errors' => $errors, 'received' => $data], 422);
             return;
         }
 
@@ -57,7 +69,7 @@ class AuthController
         $password = $data['password'] ?? '';
 
         if (!$email || $password === '') {
-            json_response(['message' => 'Invalid credentials'], 422);
+            json_response(['message' => 'Invalid credentials', 'details' => 'Email and password are required'], 422);
             return;
         }
 
@@ -65,8 +77,13 @@ class AuthController
         $stmt->execute([':email' => $email]);
         $record = $stmt->fetch();
 
-        if (!$record || !password_verify($password, $record['password_hash'])) {
-            json_response(['message' => 'Invalid credentials'], 401);
+        if (!$record) {
+            json_response(['message' => 'Invalid credentials', 'details' => 'No account found with this email'], 401);
+            return;
+        }
+
+        if (!password_verify($password, $record['password_hash'])) {
+            json_response(['message' => 'Invalid credentials', 'details' => 'Incorrect password'], 401);
             return;
         }
 
@@ -88,7 +105,12 @@ class AuthController
     {
         $stmt = $this->db->prepare('SELECT id, email, display_name, created_at FROM users WHERE id = :id');
         $stmt->execute([':id' => $id]);
-        return $stmt->fetch() ?: [];
+        $user = $stmt->fetch();
+        if ($user) {
+            // Ensure id is an integer
+            $user['id'] = (int) $user['id'];
+        }
+        return $user ?: [];
     }
 }
 

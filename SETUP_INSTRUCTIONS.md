@@ -115,8 +115,9 @@ This method works from your current folder location - no need to move files!
    *(Replace with your actual path if different)*
 3. Start the server:
    ```bash
-   php -S localhost:8000
+   php -S 0.0.0.0:8000
    ```
+   **IMPORTANT:** Use `0.0.0.0` instead of `localhost` so FlutLab can access it!
 4. ✅ You should see: "Development Server started at http://localhost:8000"
 5. **Keep this window open!** (Don't close it)
 6. Test in browser: `http://localhost:8000/api/entries`

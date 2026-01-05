@@ -1,5 +1,13 @@
 <?php
 
+// Disable error display and ensure clean output
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+// Prevent any output before JSON
+ob_start();
+
 require_once __DIR__ . '/../src/bootstrap.php';
 
 use Controllers\AuthController;
@@ -17,7 +25,9 @@ $entryController = new EntryController($db);
 // Enable CORS for Flutter app
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, ngrok-skip-browser-warning');
+header('Access-Control-Max-Age: 86400');
+header('Access-Control-Allow-Credentials: false');
 
 // Handle preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

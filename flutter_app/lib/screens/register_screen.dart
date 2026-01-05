@@ -41,8 +41,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
 
     if (success && mounted) {
-      Navigator.of(context).pushReplacement(
+      // Clear navigation stack and go to home
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
       );
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

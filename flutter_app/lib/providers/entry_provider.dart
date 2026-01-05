@@ -125,7 +125,49 @@ class EntryProvider with ChangeNotifier {
     try {
       return await _apiClient.getEntry(id);
     } catch (e) {
-      throw e;
+      rethrow;
+    }
+  }
+
+  Future<bool> likeEntry(int id) async {
+    try {
+      await _apiClient.likeEntry(id);
+      // Reload the entry to get updated like count
+      final index = _entries.indexWhere((e) => e.id == id);
+      if (index != -1) {
+        final updatedEntry = await _apiClient.getEntry(id);
+        _entries[index] = updatedEntry;
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      // Check if error is "Already liked" - this is expected behavior
+      final errorMsg = e.toString().toLowerCase();
+      if (errorMsg.contains('already liked')) {
+        _error = null; // Not really an error, just already liked
+        return false; // Return false to indicate we should unlike instead
+      }
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> unlikeEntry(int id) async {
+    try {
+      await _apiClient.unlikeEntry(id);
+      // Reload the entry to get updated like count
+      final index = _entries.indexWhere((e) => e.id == id);
+      if (index != -1) {
+        final updatedEntry = await _apiClient.getEntry(id);
+        _entries[index] = updatedEntry;
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 

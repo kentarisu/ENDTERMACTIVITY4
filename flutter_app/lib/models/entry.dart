@@ -28,20 +28,36 @@ class Entry {
   });
 
   factory Entry.fromJson(Map<String, dynamic> json) {
-    return Entry(
-      id: int.parse(json['id'].toString()),
-      userId: int.parse(json['user_id'].toString()),
-      title: json['title'] as String,
-      releaseYear: json['release_year'] != null ? int.parse(json['release_year'].toString()) : null,
-      review: json['review'] as String?,
-      rating: json['rating'] != null ? int.parse(json['rating'].toString()) : null,
-      status: json['status'] as String,
-      posterUrl: json['poster_url'] as String?,
-      createdAt: json['created_at'] as String,
-      updatedAt: json['updated_at'] as String,
-      userName: json['user_name'] as String?,
-      likeCount: json['like_count'] != null ? int.parse(json['like_count'].toString()) : null,
-    );
+    try {
+      // Helper function to safely parse integers
+      int safeParseInt(dynamic value) {
+        if (value == null) throw 'Value is null';
+        if (value is int) return value;
+        if (value is String) {
+          if (value.isEmpty) throw 'Value is empty string';
+          return int.parse(value);
+        }
+        if (value is double) return value.toInt();
+        throw 'Cannot parse int from ${value.runtimeType}: $value';
+      }
+
+      return Entry(
+        id: safeParseInt(json['id']),
+        userId: safeParseInt(json['user_id']),
+        title: json['title']?.toString() ?? '',
+        releaseYear: json['release_year'] != null ? safeParseInt(json['release_year']) : null,
+        review: json['review']?.toString(),
+        rating: json['rating'] != null ? safeParseInt(json['rating']) : null,
+        status: json['status']?.toString() ?? 'planning',
+        posterUrl: json['poster_url']?.toString(),
+        createdAt: json['created_at']?.toString() ?? '',
+        updatedAt: json['updated_at']?.toString() ?? '',
+        userName: json['user_name']?.toString(),
+        likeCount: json['like_count'] != null ? safeParseInt(json['like_count']) : null,
+      );
+    } catch (e) {
+      throw 'Error parsing Entry from JSON: $e. JSON: $json';
+    }
   }
 
   Map<String, dynamic> toJson() {
